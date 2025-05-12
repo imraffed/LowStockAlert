@@ -27,40 +27,44 @@
         #fileInput {
             display: none;
         }
-        .upload-btn {
-            background-color: #3498db;
+        .btn {
             color: white;
             padding: 10px 20px;
             border: none;
             border-radius: 5px;
             cursor: pointer;
             font-size: 16px;
-            margin-bottom: 15px;
+            margin: 5px;
         }
-        .upload-btn:hover {
+        .btn-upload {
+            background-color: #3498db;
+        }
+        .btn-upload:hover {
             background-color: #2980b9;
+        }
+        .btn-analyze {
+            background-color: #2ecc71;
+        }
+        .btn-analyze:hover {
+            background-color: #27ae60;
+        }
+        .btn-analyze:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
+        }
+        .btn-export {
+            background-color: #9b59b6;
+        }
+        .btn-export:hover {
+            background-color: #8e44ad;
+        }
+        .btn-export:disabled {
+            background-color: #95a5a6;
+            cursor: not-allowed;
         }
         #fileName {
             margin-top: 10px;
             font-style: italic;
-        }
-        #analyzeBtn {
-            background-color: #2ecc71;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            display: block;
-            margin: 20px auto;
-        }
-        #analyzeBtn:disabled {
-            background-color: #95a5a6;
-            cursor: not-allowed;
-        }
-        #analyzeBtn:hover:not(:disabled) {
-            background-color: #27ae60;
         }
         .results {
             margin-top: 30px;
@@ -155,17 +159,17 @@
     <div class="instructions">
         <h3>Instructions:</h3>
         <ol>
-            <li>Upload your inventory CSV file</li>
-            <li>Select which columns contain the product name, location, and quantity</li>
-            <li>Choose analysis type (compare Sales Floor vs Vault or analyze all rooms)</li>
-            <li>Configure analysis settings</li>
-            <li>Click "Analyze Inventory"</li>
+            <li><strong>Upload</strong> your inventory CSV file</li>
+            <li><strong>Select columns</strong> (Product, Location, Quantity)</li>
+            <li><strong>Choose analysis type</strong> (Floor vs. Vault or All Rooms)</li>
+            <li><strong>Set thresholds</strong> (Low stock alert level)</li>
+            <li><strong>Analyze</strong> and <strong>Export</strong> results</li>
         </ol>
     </div>
     
     <div class="upload-container">
         <input type="file" id="fileInput" accept=".csv">
-        <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Choose CSV File</button>
+        <button class="btn btn-upload" onclick="document.getElementById('fileInput').click()">Choose CSV File</button>
         <div id="fileName">No file selected</div>
     </div>
     
@@ -235,16 +239,18 @@
         </div>
     </div>
     
-    <button id="analyzeBtn" disabled>Analyze Inventory</button>
+    <button id="analyzeBtn" class="btn btn-analyze" disabled>Analyze Inventory</button>
     
     <div class="results">
         <h2>Analysis Results</h2>
         <div id="resultsContainer"></div>
+        <button id="exportBtn" class="btn btn-export" disabled>Export Results as CSV</button>
     </div>
 
     <script>
         let inventoryData = [];
         let csvHeaders = [];
+        let currentResults = null;
         
         // File input change handler
         document.getElementById('fileInput').addEventListener('change', function(e) {
@@ -293,20 +299,16 @@
             // Add options for each header
             csvHeaders.forEach(header => {
                 if (header) {
-                    const option1 = document.createElement('option');
-                    option1.value = header;
-                    option1.textContent = header;
-                    productSelect.appendChild(option1.cloneNode(true));
-                    
-                    const option2 = option1.cloneNode(true);
-                    locationSelect.appendChild(option2);
-                    
-                    const option3 = option1.cloneNode(true);
-                    quantitySelect.appendChild(option3);
+                    const option = document.createElement('option');
+                    option.value = header;
+                    option.textContent = header;
+                    productSelect.appendChild(option.cloneNode(true));
+                    locationSelect.appendChild(option.cloneNode(true));
+                    quantitySelect.appendChild(option.cloneNode(true));
                 }
             });
             
-            // Try to auto-detect likely columns
+            // Auto-detect columns
             autoDetectColumns();
             
             // Show the column selector
@@ -406,8 +408,14 @@
         document.getElementById('locationColumn').addEventListener('change', checkAnalyzeButton);
         document.getElementById('quantityColumn').addEventListener('change', checkAnalyzeButton);
         
+        // Export button click handler
+        document.getElementById('exportBtn').addEventListener('click', exportResultsAsCSV);
+        
         // Analyze button click handler
-        document.getElementById('analyzeBtn').addEventListener('click', function() {
+        document.getElementById('analyzeBtn').addEventListener('click', analyzeInventoryData);
+        
+        // Main analysis function
+        function analyzeInventoryData() {
             // Get selected columns
             const productCol = document.getElementById('productColumn').value;
             const locationCol = document.getElementById('locationColumn').value;
@@ -424,6 +432,7 @@
                 inventoryData = parseCSVWithColumns(content, productCol, locationCol, quantityCol);
                 
                 let results;
+                let threshold;
                 if (analysisType === 'floorVault') {
                     // Floor vs Vault analysis
                     const floorNames = document.getElementById('floorLocationNames').value
@@ -432,23 +441,33 @@
                     const vaultNames = document.getElementById('vaultLocationNames').value
                         .split(',')
                         .map(name => name.trim().toLowerCase());
-                    const threshold = parseInt(document.getElementById('lowStockThreshold').value) || 5;
+                    threshold = parseInt(document.getElementById('lowStockThreshold').value) || 5;
                     
                     results = analyzeFloorVault(inventoryData, floorNames, vaultNames, threshold);
-                    displayFloorVaultResults(results, threshold);
+                    displayResults(results, 'floorVault', threshold);
                 } else {
                     // All rooms analysis
                     const primaryNames = document.getElementById('primaryRoomNames').value
                         .split(',')
                         .map(name => name.trim().toLowerCase());
-                    const threshold = parseInt(document.getElementById('allRoomsThreshold').value) || 5;
+                    threshold = parseInt(document.getElementById('allRoomsThreshold').value) || 5;
                     
                     results = analyzeAllRooms(inventoryData, primaryNames, threshold);
-                    displayAllRoomsResults(results, threshold);
+                    displayResults(results, 'allRooms', threshold);
                 }
+                
+                // Store results for export
+                currentResults = {
+                    type: analysisType,
+                    data: results,
+                    threshold: threshold
+                };
+                
+                // Enable export button
+                document.getElementById('exportBtn').disabled = false;
             };
             reader.readAsText(file);
-        });
+        }
         
         // Parse CSV with specific columns
         function parseCSVWithColumns(content, productCol, locationCol, quantityCol) {
@@ -529,6 +548,9 @@
                 }
             }
             
+            // Sort results alphabetically by product name
+            results.sort((a, b) => a.productName.localeCompare(b.productName));
+            
             return results;
         }
         
@@ -576,91 +598,80 @@
                 }
             }
             
+            // Sort results alphabetically by product name
+            results.sort((a, b) => a.productName.localeCompare(b.productName));
+            
             return results;
         }
         
-        // Display Floor vs Vault results
-        function displayFloorVaultResults(results, threshold) {
+        // Display results
+        function displayResults(results, analysisType, threshold) {
             const container = document.getElementById('resultsContainer');
             
             if (results.length === 0) {
-                container.innerHTML = `<p>No products found with ${threshold} or fewer items on the sales floor but available in the vault.</p>`;
+                container.innerHTML = `<p>No products found matching your criteria.</p>`;
                 return;
             }
             
-            let html = `
-                <p>Found ${results.length} products with ${threshold} or fewer items on the sales floor but available in the vault:</p>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Product Name</th>
-                            <th>Floor Quantity</th>
-                            <th>Available In Vault</th>
-                            <th>Vault Quantity</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
+            let html = '';
             
-            results.forEach(product => {
-                product.vaultLocations.forEach((location, index) => {
-                    html += `
-                        <tr${index === 0 ? ' class="highlight"' : ''}>
-                            ${index === 0 ? `<td rowspan="${product.vaultLocations.length}">${product.productName}</td>` : ''}
-                            ${index === 0 ? `<td rowspan="${product.vaultLocations.length}">${product.floorQuantity}</td>` : ''}
-                            <td>${location.room}</td>
-                            <td>${location.quantity}</td>
-                        </tr>
-                    `;
+            if (analysisType === 'floorVault') {
+                html = `
+                    <p>Found ${results.length} products with ${threshold} or fewer items on the sales floor but available in the vault:</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Floor Quantity</th>
+                                <th>Available In Vault</th>
+                                <th>Vault Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                results.forEach(product => {
+                    product.vaultLocations.forEach((location, index) => {
+                        html += `
+                            <tr${index === 0 ? ' class="highlight"' : ''}>
+                                ${index === 0 ? `<td rowspan="${product.vaultLocations.length}">${product.productName}</td>` : ''}
+                                ${index === 0 ? `<td rowspan="${product.vaultLocations.length}">${product.floorQuantity}</td>` : ''}
+                                <td>${location.room}</td>
+                                <td>${location.quantity}</td>
+                            </tr>
+                        `;
+                    });
                 });
-            });
-            
-            html += `
-                    </tbody>
-                </table>
-                <p style="margin-top: 20px;">Highlighted rows show the first vault location for each product.</p>
-            `;
-            
-            container.innerHTML = html;
-        }
-        
-        // Display All Rooms results
-        function displayAllRoomsResults(results, threshold) {
-            const container = document.getElementById('resultsContainer');
-            
-            if (results.length === 0) {
-                container.innerHTML = `<p>No products found with ${threshold} or fewer items in primary locations but available in other rooms.</p>`;
-                return;
+            } else {
+                html = `
+                    <p>Found ${results.length} products with ${threshold} or fewer items in primary locations but available in other rooms:</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Product Name</th>
+                                <th>Primary Location</th>
+                                <th>Primary Qty</th>
+                                <th>Available In</th>
+                                <th>Quantity</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                results.forEach(product => {
+                    product.otherLocations.forEach((location, index) => {
+                        html += `
+                            <tr${index === 0 ? ' class="highlight"' : ''}>
+                                ${index === 0 ? `<td rowspan="${product.otherLocations.length}">${product.productName}</td>` : ''}
+                                ${index === 0 ? `<td rowspan="${product.otherLocations.length}">${product.primaryRoom}</td>` : ''}
+                                ${index === 0 ? `<td rowspan="${product.otherLocations.length}">${product.primaryQuantity}</td>` : ''}
+                                <td>${location.room}</td>
+                                <td>${location.quantity}</td>
+                            </tr>
+                        `;
+                    });
+                });
             }
-            
-            let html = `
-                <p>Found ${results.length} products with ${threshold} or fewer items in primary locations but available in other rooms:</p>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Product Name</th>
-                            <th>Primary Location</th>
-                            <th>Primary Qty</th>
-                            <th>Available In</th>
-                            <th>Quantity</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            
-            results.forEach(product => {
-                product.otherLocations.forEach((location, index) => {
-                    html += `
-                        <tr${index === 0 ? ' class="highlight"' : ''}>
-                            ${index === 0 ? `<td rowspan="${product.otherLocations.length}">${product.productName}</td>` : ''}
-                            ${index === 0 ? `<td rowspan="${product.otherLocations.length}">${product.primaryRoom}</td>` : ''}
-                            ${index === 0 ? `<td rowspan="${product.otherLocations.length}">${product.primaryQuantity}</td>` : ''}
-                            <td>${location.room}</td>
-                            <td>${location.quantity}</td>
-                        </tr>
-                    `;
-                });
-            });
             
             html += `
                     </tbody>
@@ -669,6 +680,48 @@
             `;
             
             container.innerHTML = html;
+        }
+        
+        // Export results as CSV
+        function exportResultsAsCSV() {
+            if (!currentResults || !currentResults.data || currentResults.data.length === 0) {
+                alert('No results to export. Please analyze your inventory first.');
+                return;
+            }
+            
+            let csvContent = '';
+            const results = currentResults.data;
+            
+            if (currentResults.type === 'floorVault') {
+                // Floor vs Vault CSV format
+                csvContent = 'Product Name,Floor Quantity,Vault Location,Vault Quantity\n';
+                
+                results.forEach(product => {
+                    product.vaultLocations.forEach(location => {
+                        csvContent += `"${product.productName.replace(/"/g, '""')}",${product.floorQuantity},"${location.room.replace(/"/g, '""')}",${location.quantity}\n`;
+                    });
+                });
+            } else {
+                // All Rooms CSV format
+                csvContent = 'Product Name,Primary Location,Primary Quantity,Available Location,Available Quantity\n';
+                
+                results.forEach(product => {
+                    product.otherLocations.forEach(location => {
+                        csvContent += `"${product.productName.replace(/"/g, '""')}","${product.primaryRoom.replace(/"/g, '""')}",${product.primaryQuantity},"${location.room.replace(/"/g, '""')}",${location.quantity}\n`;
+                    });
+                });
+            }
+            
+            // Create download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `inventory_analysis_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
     </script>
 </body>
